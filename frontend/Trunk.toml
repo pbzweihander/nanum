@@ -1,0 +1,8 @@
+[build]
+release = true
+public_url = "/static/"
+
+[[hooks]]
+stage = "pre_build"
+command = "env"
+command_arguments = ["NODE_ENV=production", "npx", "tailwindcss", "-o", "asset.css", "--minify"]
