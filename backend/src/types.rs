@@ -1,0 +1,15 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+pub struct Metadata {
+    pub creator_email: String,
+    #[serde(with = "crate::utils::base64")]
+    pub salt: Vec<u8>,
+    #[serde(with = "crate::utils::base64")]
+    pub nonce: Vec<u8>,
+    #[serde(with = "crate::utils::base64")]
+    pub filename_nonce: Vec<u8>,
+    #[serde(with = "crate::utils::base64")]
+    pub filename: Vec<u8>,
+    pub size: usize,
+}
