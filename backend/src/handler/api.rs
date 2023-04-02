@@ -6,9 +6,9 @@ use axum::{
     routing, Json, Router,
 };
 use nanum_core::types::{Metadata, MetadataCreationReq};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use crate::s3;
+use crate::{config::CONFIG, s3};
 
 use super::{auth::User, AppState};
 
@@ -16,10 +16,8 @@ pub fn create_router() -> Router<AppState> {
     Router::new()
         .route("/health", routing::get(get_health))
         .route("/user", routing::get(get_user))
-        .route(
-            "/metadata/:id",
-            routing::get(get_metadata).post(post_metadata),
-        )
+        .route("/metadata/:id", routing::get(get_metadata))
+        .route("/metadata", routing::post(post_metadata_with_random_id))
         .route("/file/:id", routing::get(get_file).post(post_file))
 }
 
@@ -48,17 +46,25 @@ async fn get_metadata(
 }
 
 #[derive(Deserialize)]
-struct PostMetadataReq {
+struct PostMetadataWithRandomIdReq {
     #[serde(flatten)]
     pub req: MetadataCreationReq,
 }
 
-async fn post_metadata(
+#[derive(Serialize)]
+struct PostMetadataWithRandomIdResp {
+    pub id: String,
+}
+
+async fn post_metadata_with_random_id(
     user: User,
-    Path(id): Path<String>,
     State(state): State<AppState>,
-    Json(req): Json<PostMetadataReq>,
-) -> Result<(), (StatusCode, &'static str)> {
+    Json(req): Json<PostMetadataWithRandomIdReq>,
+) -> Result<Json<PostMetadataWithRandomIdResp>, (StatusCode, &'static str)> {
+    let id = random_string::generate(
+        CONFIG.random_uri_length,
+        "abcedfghijklmnopqrstuvwxyzABCEDFGHIJKLMNOPQRSTUVWXYZ0123456789",
+    );
     let metadata = req.req.into_metadata(user.primary_email);
     s3::upload_metadata(&state.s3_client, &id, &metadata)
         .await
@@ -69,7 +75,7 @@ async fn post_metadata(
                 "failed to upload metadata to S3",
             )
         })?;
-    Ok(())
+    Ok(Json(PostMetadataWithRandomIdResp { id }))
 }
 
 async fn get_file(
