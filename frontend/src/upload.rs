@@ -15,7 +15,10 @@ use wasm_bindgen_futures::spawn_local;
 use web_sys::{Event, File, HtmlInputElement, SubmitEvent};
 use yew::{function_component, html, use_effect_with_deps, use_state, Html, TargetCast};
 
-use crate::{navbar::NavBar, types::User, BLOCK_SIZE};
+use crate::{navbar::NavBar, types::User};
+
+// const BLOCK_SIZE: usize = 1024 * 1024 * 10;
+const BLOCK_SIZE: usize = 1024 * 1024;
 
 #[derive(Deserialize)]
 struct PostMetadataResp {
@@ -166,6 +169,7 @@ pub fn upload() -> Html {
                 filename_nonce: filename_nonce.to_vec(),
                 filename: encrypted_filename,
                 size: file.size() as usize,
+                block_size: BLOCK_SIZE,
             };
 
             let stream_nonce = *stream_nonce;

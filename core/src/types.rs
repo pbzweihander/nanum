@@ -12,6 +12,7 @@ pub struct Metadata {
     #[serde(with = "crate::utils::base64")]
     pub filename: Vec<u8>,
     pub size: usize,
+    pub block_size: usize,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -25,6 +26,7 @@ pub struct MetadataCreationReq {
     #[serde(with = "crate::utils::base64")]
     pub filename: Vec<u8>,
     pub size: usize,
+    pub block_size: usize,
 }
 
 impl MetadataCreationReq {
@@ -35,6 +37,7 @@ impl MetadataCreationReq {
             filename_nonce,
             filename,
             size,
+            block_size,
         } = self;
         Metadata {
             creator_email,
@@ -43,6 +46,7 @@ impl MetadataCreationReq {
             filename_nonce,
             filename,
             size,
+            block_size,
         }
     }
 }
