@@ -18,7 +18,7 @@ pub fn create_router() -> Router<AppState> {
         .route("/user", routing::get(get_user))
         .route("/metadata/:id", routing::get(get_metadata))
         .route("/metadata", routing::post(post_metadata_with_random_id))
-        .route("/file/:id", routing::get(get_file).post(post_file))
+        .route("/file/:id/:seq", routing::get(get_file).post(post_file))
 }
 
 async fn get_health() -> &'static str {
@@ -79,26 +79,28 @@ async fn post_metadata_with_random_id(
 }
 
 async fn get_file(
-    Path(id): Path<String>,
+    Path((id, seq)): Path<(String, usize)>,
     State(state): State<AppState>,
 ) -> Result<StreamBody<ByteStream>, (StatusCode, &'static str)> {
-    let file = s3::get_file(&state.s3_client, &id).await.map_err(|error| {
-        tracing::error!(%error, "failed to get file from S3");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "failed to get file from S3",
-        )
-    })?;
+    let file = s3::get_file(&state.s3_client, &id, seq)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "failed to get file from S3");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to get file from S3",
+            )
+        })?;
     Ok(StreamBody::new(file))
 }
 
 async fn post_file(
     _user: User,
-    Path(id): Path<String>,
+    Path((id, seq)): Path<(String, usize)>,
     State(state): State<AppState>,
     body: Bytes,
 ) -> Result<(), (StatusCode, &'static str)> {
-    s3::upload_file(&state.s3_client, &id, body.to_vec())
+    s3::upload_file(&state.s3_client, &id, seq, body.to_vec())
         .await
         .map_err(|error| {
             tracing::error!(%error, "failed to upload file to S3");

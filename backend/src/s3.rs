@@ -4,8 +4,8 @@ use nanum_core::types::Metadata;
 
 use crate::config::CONFIG;
 
-fn key_file(id: &str) -> String {
-    format!("file/{id}")
+fn key_file(id: &str, seq: usize) -> String {
+    format!("file/{id}.{seq}")
 }
 
 fn key_metadata(id: &str) -> String {
@@ -22,8 +22,8 @@ async fn get_object(s3_client: &Client, key: &str) -> Result<ByteStream> {
     Ok(resp.body)
 }
 
-pub async fn get_file(s3_client: &Client, id: &str) -> Result<ByteStream> {
-    get_object(s3_client, &key_file(id)).await
+pub async fn get_file(s3_client: &Client, id: &str, seq: usize) -> Result<ByteStream> {
+    get_object(s3_client, &key_file(id, seq)).await
 }
 
 pub async fn get_metadata(s3_client: &Client, id: &str) -> Result<Metadata> {
@@ -44,12 +44,12 @@ pub async fn upload_metadata(s3_client: &Client, id: &str, metadata: &Metadata) 
     Ok(())
 }
 
-pub async fn upload_file(s3_client: &Client, id: &str, file: Vec<u8>) -> Result<()> {
+pub async fn upload_file(s3_client: &Client, id: &str, seq: usize, data: Vec<u8>) -> Result<()> {
     s3_client
         .put_object()
         .bucket(&CONFIG.s3_bucket_name)
-        .key(key_file(id))
-        .body(file.into())
+        .key(key_file(id, seq))
+        .body(data.into())
         .send()
         .await?;
     Ok(())
