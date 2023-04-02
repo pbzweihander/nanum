@@ -1,8 +1,6 @@
 mod config;
 mod handler;
 mod s3;
-mod types;
-mod utils;
 
 use anyhow::{Context, Result};
 use tracing_subscriber::layer::SubscriberExt;

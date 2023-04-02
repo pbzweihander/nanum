@@ -1412,6 +1412,7 @@ dependencies = [
  "include_dir",
  "jsonwebtoken",
  "mime",
+ "nanum-core",
  "oauth2",
  "once_cell",
  "reqwest",
@@ -1423,6 +1424,14 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+]
+
+[[package]]
+name = "nanum-core"
+version = "0.1.0"
+dependencies = [
+ "base64 0.21.0",
+ "serde",
 ]
 
 [[package]]

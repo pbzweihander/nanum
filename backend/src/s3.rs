@@ -1,7 +1,8 @@
 use anyhow::Result;
 use aws_sdk_s3::{primitives::ByteStream, Client};
+use nanum_core::types::Metadata;
 
-use crate::{config::CONFIG, types::Metadata};
+use crate::config::CONFIG;
 
 fn key_file(id: &str) -> String {
     format!("file/{id}")

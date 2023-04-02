@@ -5,9 +5,10 @@ use axum::{
     http::StatusCode,
     routing, Json, Router,
 };
+use nanum_core::types::{Metadata, MetadataCreationReq};
 use serde::Deserialize;
 
-use crate::{s3, types::Metadata};
+use crate::s3;
 
 use super::{auth::User, AppState};
 
@@ -48,15 +49,8 @@ async fn get_metadata(
 
 #[derive(Deserialize)]
 struct PostMetadataReq {
-    #[serde(with = "crate::utils::base64")]
-    pub salt: Vec<u8>,
-    #[serde(with = "crate::utils::base64")]
-    pub nonce: Vec<u8>,
-    #[serde(with = "crate::utils::base64")]
-    pub filename_nonce: Vec<u8>,
-    #[serde(with = "crate::utils::base64")]
-    pub filename: Vec<u8>,
-    pub size: usize,
+    #[serde(flatten)]
+    pub req: MetadataCreationReq,
 }
 
 async fn post_metadata(
@@ -65,14 +59,7 @@ async fn post_metadata(
     State(state): State<AppState>,
     Json(req): Json<PostMetadataReq>,
 ) -> Result<(), (StatusCode, &'static str)> {
-    let metadata = Metadata {
-        creator_email: user.primary_email,
-        salt: req.salt,
-        nonce: req.nonce,
-        filename_nonce: req.filename_nonce,
-        filename: req.filename,
-        size: req.size,
-    };
+    let metadata = req.req.into_metadata(user.primary_email);
     s3::upload_metadata(&state.s3_client, &id, &metadata)
         .await
         .map_err(|error| {
