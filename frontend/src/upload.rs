@@ -17,8 +17,7 @@ use yew::{function_component, html, use_effect_with_deps, use_state, Html, Targe
 
 use crate::{navbar::NavBar, types::User};
 
-// const BLOCK_SIZE: usize = 1024 * 1024 * 10;
-const BLOCK_SIZE: usize = 1024 * 1024;
+const BLOCK_SIZE: usize = 1024 * 1024 * 10;
 
 #[derive(Deserialize)]
 struct PostMetadataResp {
@@ -63,6 +62,8 @@ pub fn upload() -> Html {
     let file = use_state::<Option<File>, _>(|| None);
     let passphrase = use_state(String::new);
 
+    let progress = use_state(|| 0usize);
+
     let on_file_change = {
         let file = file.clone();
         move |e: Event| {
@@ -85,6 +86,7 @@ pub fn upload() -> Html {
     let onsubmit = {
         let file = file.clone();
         let passphrase = passphrase.clone();
+        let progress = progress.clone();
         move |e: SubmitEvent| {
             e.prevent_default();
 
@@ -93,6 +95,7 @@ pub fn upload() -> Html {
             }
 
             let file = file.as_ref().unwrap();
+            let file_size = file.size() as usize;
 
             // Reference: https://github.com/skystar-p/hako/blob/main/webapp/src/upload.rs
 
@@ -168,12 +171,13 @@ pub fn upload() -> Html {
                 nonce: stream_nonce.to_vec(),
                 filename_nonce: filename_nonce.to_vec(),
                 filename: encrypted_filename,
-                size: file.size() as usize,
+                size: file_size,
                 block_size: BLOCK_SIZE,
             };
 
             let stream_nonce = *stream_nonce;
 
+            let progress = progress.clone();
             // core logic of streaming upload / encryption
             let encrypt_routine = async move {
                 // use stream encryptor
@@ -208,6 +212,7 @@ pub fn upload() -> Html {
                     }
                 };
 
+                let mut progress_bytes = 0;
                 let mut seq: i64 = 1;
                 let mut buffer = Vec::<u8>::with_capacity(BLOCK_SIZE);
                 // start encryption and upload
@@ -251,8 +256,8 @@ pub fn upload() -> Html {
                         v = &v[split_idx..];
                         seq += 1;
 
-                        // TODO: Progress
-                        log::info!("chunk_len: {}", chunk_len);
+                        progress_bytes += chunk_len;
+                        progress.set(progress_bytes);
                     }
                     buffer.extend(v);
                 }
@@ -285,6 +290,7 @@ pub fn upload() -> Html {
                 }
 
                 // TODO: Complete
+                progress.set(file_size);
                 log::info!("finished");
             };
 
@@ -296,23 +302,35 @@ pub fn upload() -> Html {
 
     let is_submit_disabled = file.is_none() || passphrase.is_empty();
 
+    let progress_show = if let Some(file) = &*file {
+        let p = (*progress as f64) / file.size() * 1000.;
+        html! {
+            <progress class="progress w-full mt-4" value={format!("{}", p)} max="1000" />
+        }
+    } else {
+        html! { <></> }
+    };
+
     html! {
         <NavBar user={(*user).clone()}>
-            <div class="w-full flex justify-center mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
-                  <path fill-rule="evenodd" d="M10.5 3.75a6 6 0 00-5.98 6.496A5.25 5.25 0 006.75 20.25H18a4.5 4.5 0 002.206-8.423 3.75 3.75 0 00-4.133-4.303A6.001 6.001 0 0010.5 3.75zm2.03 5.47a.75.75 0 00-1.06 0l-3 3a.75.75 0 101.06 1.06l1.72-1.72v4.94a.75.75 0 001.5 0v-4.94l1.72 1.72a.75.75 0 101.06-1.06l-3-3z" clip-rule="evenodd" />
-                </svg>
+            <div class="max-w-xs">
+                <div class="w-full flex justify-center mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
+                      <path fill-rule="evenodd" d="M10.5 3.75a6 6 0 00-5.98 6.496A5.25 5.25 0 006.75 20.25H18a4.5 4.5 0 002.206-8.423 3.75 3.75 0 00-4.133-4.303A6.001 6.001 0 0010.5 3.75zm2.03 5.47a.75.75 0 00-1.06 0l-3 3a.75.75 0 101.06 1.06l1.72-1.72v4.94a.75.75 0 001.5 0v-4.94l1.72 1.72a.75.75 0 101.06-1.06l-3-3z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <form class="form-control w-full" {onsubmit}>
+                    <input type="file" class="file-input w-full mb-4" onchange={on_file_change} />
+                    <input
+                        type="password"
+                        placeholder="Passphrase"
+                        class="input w-full mb-4"
+                        onchange={on_passphrase_change}
+                    />
+                    <input type="submit" class="btn" value="Upload" disabled={is_submit_disabled} />
+                </form>
+                {progress_show}
             </div>
-            <form class="form-control w-full max-w-xs" {onsubmit}>
-                <input type="file" class="file-input w-full mb-4" onchange={on_file_change} />
-                <input
-                    type="password"
-                    placeholder="Passphrase"
-                    class="input w-full mb-4"
-                    onchange={on_passphrase_change}
-                />
-                <input type="submit" class="btn" value="Upload" disabled={is_submit_disabled} />
-            </form>
         </NavBar>
     }
 }

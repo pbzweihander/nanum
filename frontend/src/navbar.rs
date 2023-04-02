@@ -11,7 +11,7 @@ pub struct NavBarProps {
 pub fn navbar(props: &NavBarProps) -> Html {
     html! {
         <>
-            <div class="bg-gray-100">
+            <div>
                 <div class="container mx-auto navbar">
                     <div class="flex-1">
                         <h1 class="font-bold normal-case text-xl">{ "nanum" }</h1>
@@ -25,7 +25,7 @@ pub fn navbar(props: &NavBarProps) -> Html {
                     }
                 </div>
             </div>
-            <div class="h-[calc(100vh-4rem)] w-full bg-gray-200 flex flex-col items-center justify-center">
+            <div class="h-[calc(100vh-4rem)] w-full bg-gray-100 flex flex-col items-center justify-center">
                 { for props.children.iter() }
             </div>
         </>
