@@ -31,13 +31,24 @@ pub fn upload() -> Html {
             let user = user.clone();
             move |_| {
                 spawn_local(async move {
-                    let fetched_user: User = Request::get("/api/user")
-                        .send()
-                        .await
-                        .unwrap()
-                        .json()
-                        .await
-                        .unwrap();
+                    let resp = match Request::get("/api/user").send().await {
+                        Ok(resp) => resp,
+                        Err(error) => {
+                            log::error!("failed to fetch user: {:?}", error);
+                            return;
+                        }
+                    };
+                    if resp.status() != 200 {
+                        log::error!("failed to fetch user. status code: {}", resp.status());
+                        return;
+                    }
+                    let fetched_user: User = match resp.json().await {
+                        Ok(resp) => resp,
+                        Err(error) => {
+                            log::error!("failed to read user response: {:?}", error);
+                            return;
+                        }
+                    };
                     user.set(fetched_user.primary_email);
                 });
                 || ()
