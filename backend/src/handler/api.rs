@@ -14,6 +14,7 @@ use super::{auth::User, AppState};
 pub fn create_router() -> Router<AppState> {
     Router::new()
         .route("/health", routing::get(get_health))
+        .route("/user", routing::get(get_user))
         .route(
             "/metadata/:id",
             routing::get(get_metadata).post(post_metadata),
@@ -23,6 +24,10 @@ pub fn create_router() -> Router<AppState> {
 
 async fn get_health() -> &'static str {
     "OK"
+}
+
+async fn get_user(user: User) -> Json<User> {
+    Json(user)
 }
 
 async fn get_metadata(
