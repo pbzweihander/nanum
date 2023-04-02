@@ -25,7 +25,7 @@ pub fn navbar(props: &NavBarProps) -> Html {
                     }
                 </div>
             </div>
-            <div class="h-[calc(100vh-4rem)] w-full bg-gray-200 flex items-center justify-center">
+            <div class="h-[calc(100vh-4rem)] w-full bg-gray-200 flex flex-col items-center justify-center">
                 { for props.children.iter() }
             </div>
         </>
