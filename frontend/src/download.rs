@@ -58,7 +58,9 @@ pub fn download(props: &DownloadProps) -> Html {
     let a_ref = use_node_ref();
 
     let passphrase = use_state(String::new);
-    let decrypted_filename = use_state(String::new);
+
+    let decrypted_filename = use_state::<Option<String>, _>(|| None);
+    let progress = use_state(|| 0usize);
 
     let on_passphrase_change = {
         let passphrase = passphrase.clone();
@@ -73,6 +75,7 @@ pub fn download(props: &DownloadProps) -> Html {
         let metadata = metadata.clone();
         let passphrase = passphrase.clone();
         let decrypted_filename_state = decrypted_filename.clone();
+        let progress = progress.clone();
         let a_ref = a_ref.clone();
         move |e: SubmitEvent| {
             e.prevent_default();
@@ -106,13 +109,15 @@ pub fn download(props: &DownloadProps) -> Html {
                 }
             };
 
-            // TODO: Show decrypted filename
-            decrypted_filename_state.set(String::from_utf8_lossy(&decrypted_filename).to_string());
+            decrypted_filename_state.set(Some(
+                String::from_utf8_lossy(&decrypted_filename).to_string(),
+            ));
 
             let seq_count = (metadata.size as f64 / metadata.block_size as f64).ceil() as usize;
 
             let id = id.clone();
             let metadata = metadata.clone();
+            let progress = progress.clone();
             let a_ref = a_ref.clone();
             spawn_local(async move {
                 // make cipher
@@ -151,9 +156,8 @@ pub fn download(props: &DownloadProps) -> Html {
                         }
                     };
 
-                    // TODO: progress
-
                     body.append(&mut res);
+                    progress.set(body.len());
                 }
 
                 let resp = match Request::get(&format!("/api/file/{id}/{seq_count}"))
@@ -187,6 +191,16 @@ pub fn download(props: &DownloadProps) -> Html {
                 };
 
                 body.append(&mut res);
+                progress.set(body.len());
+
+                if body.len() != metadata.size {
+                    log::error!(
+                        "received bytes does not match expected size. expected: {}, actual: {}",
+                        metadata.size,
+                        body.len()
+                    );
+                    return;
+                }
 
                 let a = match a_ref.cast::<HtmlLinkElement>() {
                     Some(a) => a,
@@ -249,22 +263,44 @@ pub fn download(props: &DownloadProps) -> Html {
 
     let is_submit_disabled = passphrase.is_empty() || metadata.is_none();
 
+    let progress_show = if let Some(metadata) = &*metadata {
+        let p = (*progress as f64) / (metadata.size as f64) * 1000.;
+        html! {
+            <div class="w-full mt-8">
+                <progress class="progress w-full" value={format!("{}", p)} max="1000" />
+            </div>
+        }
+    } else {
+        html! { <></> }
+    };
+    let decrypted_filename_show = if let Some(filename) = &*decrypted_filename {
+        html! {
+            <div class="w-full mt-4">{filename}</div>
+        }
+    } else {
+        html! { <></> }
+    };
+
     html! {
         <NavBar>
-            <div class="w-full flex justify-center mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
-                  <path fill-rule="evenodd" d="M10.5 3.75a6 6 0 00-5.98 6.496A5.25 5.25 0 006.75 20.25H18a4.5 4.5 0 002.206-8.423 3.75 3.75 0 00-4.133-4.303A6.001 6.001 0 0010.5 3.75zm2.25 6a.75.75 0 00-1.5 0v4.94l-1.72-1.72a.75.75 0 00-1.06 1.06l3 3a.75.75 0 001.06 0l3-3a.75.75 0 10-1.06-1.06l-1.72 1.72V9.75z" clip-rule="evenodd" />
-                </svg>
+            <div class="max-w-xs">
+                <div class="w-full flex justify-center mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
+                      <path fill-rule="evenodd" d="M10.5 3.75a6 6 0 00-5.98 6.496A5.25 5.25 0 006.75 20.25H18a4.5 4.5 0 002.206-8.423 3.75 3.75 0 00-4.133-4.303A6.001 6.001 0 0010.5 3.75zm2.25 6a.75.75 0 00-1.5 0v4.94l-1.72-1.72a.75.75 0 00-1.06 1.06l3 3a.75.75 0 001.06 0l3-3a.75.75 0 10-1.06-1.06l-1.72 1.72V9.75z" clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <form class="form-control w-full" {onsubmit}>
+                    <input
+                        type="password"
+                        placeholder="Passphrase"
+                        class="input w-full mb-4"
+                        onchange={on_passphrase_change}
+                    />
+                    <input type="submit" class="btn" value="Download" disabled={is_submit_disabled} />
+                </form>
+                {progress_show}
+                {decrypted_filename_show}
             </div>
-            <form class="form-control w-full max-w-xs" {onsubmit}>
-                <input
-                    type="password"
-                    placeholder="Passphrase"
-                    class="input w-full mb-4"
-                    onchange={on_passphrase_change}
-                />
-                <input type="submit" class="btn" value="Download" disabled={is_submit_disabled} />
-            </form>
             <a download={(*decrypted_filename).clone()} class="hidden" ref={a_ref.clone()}></a>
         </NavBar>
     }
