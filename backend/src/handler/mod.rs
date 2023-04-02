@@ -3,6 +3,7 @@ mod auth;
 mod statics;
 
 use axum::{
+    extract::DefaultBodyLimit,
     http::{header, Request},
     middleware::Next,
     response::{Html, Response},
@@ -33,6 +34,7 @@ pub fn create_router(s3_client: aws_sdk_s3::Client, http_client: reqwest::Client
 
     Router::new()
         .nest("/api", api)
+        .layer(DefaultBodyLimit::max(1024 * 1024 * 11))
         .nest("/auth", auth)
         .with_state(state)
         .layer(tower_http::trace::TraceLayer::new_for_http())
