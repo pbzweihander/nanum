@@ -63,6 +63,7 @@ pub fn upload() -> Html {
     let passphrase = use_state(String::new);
 
     let progress = use_state(|| 0usize);
+    let finished_id = use_state::<Option<String>, _>(|| None);
 
     let on_file_change = {
         let file = file.clone();
@@ -87,6 +88,7 @@ pub fn upload() -> Html {
         let file = file.clone();
         let passphrase = passphrase.clone();
         let progress = progress.clone();
+        let finished_id = finished_id.clone();
         move |e: SubmitEvent| {
             e.prevent_default();
 
@@ -178,6 +180,7 @@ pub fn upload() -> Html {
             let stream_nonce = *stream_nonce;
 
             let progress = progress.clone();
+            let finished_id = finished_id.clone();
             // core logic of streaming upload / encryption
             let encrypt_routine = async move {
                 // use stream encryptor
@@ -289,9 +292,8 @@ pub fn upload() -> Html {
                     return;
                 }
 
-                // TODO: Complete
                 progress.set(file_size);
-                log::info!("finished");
+                finished_id.set(Some(id));
             };
 
             // spawn entire routine in promise
@@ -305,7 +307,19 @@ pub fn upload() -> Html {
     let progress_show = if let Some(file) = &*file {
         let p = (*progress as f64) / file.size() * 1000.;
         html! {
-            <progress class="progress w-full mt-4" value={format!("{}", p)} max="1000" />
+            <div class="w-full mt-8">
+                <progress class="progress w-full" value={format!("{}", p)} max="1000" />
+            </div>
+        }
+    } else {
+        html! { <></> }
+    };
+    let finished_id_show = if let Some(id) = &*finished_id {
+        html! {
+            <div class="mt-4">
+                {"Uploaded to "}
+                <a href={format!("/{id}")} class="link link-primary">{format!("/{id}")}</a>
+            </div>
         }
     } else {
         html! { <></> }
@@ -330,6 +344,7 @@ pub fn upload() -> Html {
                     <input type="submit" class="btn" value="Upload" disabled={is_submit_disabled} />
                 </form>
                 {progress_show}
+                {finished_id_show}
             </div>
         </NavBar>
     }
