@@ -61,6 +61,8 @@ pub fn upload() -> Html {
         (),
     );
 
+    let error = use_state::<&'static str, _>(|| "");
+
     let file = use_state::<Option<File>, _>(|| None);
     let id = use_state(String::new);
     let passphrase = use_state(String::new);
@@ -96,13 +98,15 @@ pub fn upload() -> Html {
     );
 
     let onsubmit = use_callback(
-        move |e: SubmitEvent, (file, id, passphrase, upload_started, progress, finished_id)| {
+        move |e: SubmitEvent,
+              (error_state, file, id, passphrase, upload_started, progress, finished_id)| {
             e.prevent_default();
 
             if **upload_started || file.is_none() || passphrase.is_empty() {
                 return;
             }
 
+            error_state.set("");
             progress.set(0);
             finished_id.set(None);
             upload_started.set(true);
@@ -116,6 +120,7 @@ pub fn upload() -> Html {
             let mut salt = [0u8; 32];
             if let Err(error) = getrandom::getrandom(&mut salt) {
                 log::error!("cannot get random salt value: {:?}", error);
+                error_state.set("cannot get random salt value");
                 return;
             }
 
@@ -124,6 +129,7 @@ pub fn upload() -> Html {
             let mut key_slice = [0u8; 32];
             if let Err(err) = h.expand(&[], &mut key_slice[..]) {
                 log::error!("cannot expand passphrase by hkdf: {:?}", err);
+                error_state.set("cannot expand passphrase by hkdf");
                 return;
             }
 
@@ -131,11 +137,13 @@ pub fn upload() -> Html {
             let mut stream_nonce = [0u8; 19];
             if let Err(err) = getrandom::getrandom(&mut stream_nonce) {
                 log::error!("cannot get random nonce value: {:?}", err);
+                error_state.set("cannot get random nonce value");
                 return;
             }
             let mut filename_nonce = [0u8; 24];
             if let Err(err) = getrandom::getrandom(&mut filename_nonce) {
                 log::error!("cannot get random nonce value: {:?}", err);
+                error_state.set("cannot get random nonce value");
                 return;
             }
 
@@ -150,6 +158,7 @@ pub fn upload() -> Html {
                     s
                 } else {
                     log::error!("file stream is not web_sys::ReadableStream");
+                    error_state.set("file stream is not web_sys::ReadableStream");
                     return;
                 }
             };
@@ -161,6 +170,7 @@ pub fn upload() -> Html {
                     Ok(encrypted) => encrypted,
                     Err(err) => {
                         log::error!("failed to encrypt filename: {:?}", err);
+                        error_state.set("failed to encrypt filename");
                         return;
                     }
                 }
@@ -187,6 +197,7 @@ pub fn upload() -> Html {
 
             let stream_nonce = *stream_nonce;
 
+            let error_state = error_state.clone();
             let id = id.clone();
             let upload_started = upload_started.clone();
             let progress = progress.clone();
@@ -206,6 +217,7 @@ pub fn upload() -> Html {
                     Ok(req) => req,
                     Err(error) => {
                         log::error!("failed to make request: {:?}", error);
+                        error_state.set("failed to make request");
                         return;
                     }
                 };
@@ -213,12 +225,14 @@ pub fn upload() -> Html {
                     Ok(resp) => resp,
                     Err(error) => {
                         log::error!("failed to upload metadata: {:?}", error);
+                        error_state.set("failed to upload metadata");
                         return;
                     }
                 };
 
                 if resp.status() != 200 {
                     log::error!("failed to upload metadata. status code: {}", resp.status());
+                    error_state.set("failed to upload metadata");
                     return;
                 }
 
@@ -226,6 +240,7 @@ pub fn upload() -> Html {
                     Ok(resp) => resp.id,
                     Err(error) => {
                         log::error!("failed to read response body: {:?}", error);
+                        error_state.set("failed to read response body");
                         return;
                     }
                 };
@@ -239,6 +254,7 @@ pub fn upload() -> Html {
                         Ok(v) => v,
                         Err(error) => {
                             log::error!("failed to read stream: {:?}", error);
+                            error_state.set("failed to read stream");
                             return;
                         }
                     };
@@ -254,6 +270,7 @@ pub fn upload() -> Html {
                             Ok(chunk) => chunk,
                             Err(error) => {
                                 log::error!("failed to encrypt chunk: {:?}", error);
+                                error_state.set("failed to encrypt chunk");
                                 return;
                             }
                         };
@@ -268,12 +285,14 @@ pub fn upload() -> Html {
                             Ok(resp) => resp,
                             Err(error) => {
                                 log::error!("failed to upload chunk: {:?}", error);
+                                error_state.set("failed to upload chunk");
                                 return;
                             }
                         };
 
                         if resp.status() != 200 {
                             log::error!("failed to upload chunk. status code: {}", resp.status());
+                            error_state.set("failed to upload chunk");
                             return;
                         }
 
@@ -292,6 +311,7 @@ pub fn upload() -> Html {
                     Ok(chunk) => chunk,
                     Err(error) => {
                         log::error!("failed to encrypt chunk: {:?}", error);
+                        error_state.set("failed to encrypt chunk");
                         return;
                     }
                 };
@@ -305,12 +325,14 @@ pub fn upload() -> Html {
                     Ok(resp) => resp,
                     Err(error) => {
                         log::error!("failed to upload chunk: {:?}", error);
+                        error_state.set("failed to upload chunk");
                         return;
                     }
                 };
 
                 if resp.status() != 200 {
                     log::error!("failed to upload chunk. status code: {}", resp.status());
+                    error_state.set("failed to upload chunk");
                     return;
                 }
 
@@ -324,6 +346,7 @@ pub fn upload() -> Html {
             spawn_local(encrypt_routine);
         },
         (
+            error.clone(),
             file.clone(),
             id,
             passphrase,
@@ -389,6 +412,9 @@ pub fn upload() -> Html {
                 </form>
                 {progress_show}
                 {finished_id_show}
+                if !error.is_empty() {
+                    <div class="alert alert-error mt-4">{&*error}</div>
+                }
             </div>
         </NavBar>
     }

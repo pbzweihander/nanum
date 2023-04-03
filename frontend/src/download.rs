@@ -27,10 +27,13 @@ enum MetadataStatus {
 
 #[function_component(Download)]
 pub fn download(props: &DownloadProps) -> Html {
+    let error = use_state::<&'static str, _>(|| "");
+
     let metadata = use_state(|| MetadataStatus::Loading);
 
     use_effect_with_deps(
         {
+            let error_state = error.clone();
             let id = props.id.clone();
             let metadata = metadata.clone();
             move |_| {
@@ -39,6 +42,7 @@ pub fn download(props: &DownloadProps) -> Html {
                         Ok(resp) => resp,
                         Err(error) => {
                             log::error!("failed to fetch metadata: {:?}", error);
+                            error_state.set("failed to fetch metadata");
                             return;
                         }
                     };
@@ -49,6 +53,7 @@ pub fn download(props: &DownloadProps) -> Html {
                             return;
                         } else {
                             log::error!("failed to fetch metadata. status code: {}", status);
+                            error_state.set("failed to fetch metadata");
                             return;
                         }
                     }
@@ -56,6 +61,7 @@ pub fn download(props: &DownloadProps) -> Html {
                         Ok(resp) => resp,
                         Err(error) => {
                             log::error!("failed to read metadata response: {:?}", error);
+                            error_state.set("failed to read metadata response");
                             return;
                         }
                     };
@@ -88,6 +94,7 @@ pub fn download(props: &DownloadProps) -> Html {
         _,
         _,
         (
+            UseStateHandle<&'static str>,
             UseStateHandle<String>,
             UseStateHandle<bool>,
             UseStateHandle<Option<String>>,
@@ -99,8 +106,14 @@ pub fn download(props: &DownloadProps) -> Html {
             let id = props.id.clone();
             let metadata = metadata.clone();
             move |e: SubmitEvent,
-                  (passphrase, download_started, decrypted_filename_state, progress, a_ref)
-            | {
+                  (
+                error_state,
+                passphrase,
+                download_started,
+                decrypted_filename_state,
+                progress,
+                a_ref,
+            )| {
                 e.prevent_default();
 
                 if **download_started || passphrase.is_empty() {
@@ -113,6 +126,7 @@ pub fn download(props: &DownloadProps) -> Html {
                     return;
                 };
 
+                error_state.set("");
                 download_started.set(true);
 
                 // Reference: https://github.com/skystar-p/hako/blob/main/webapp/src/download.rs
@@ -123,6 +137,7 @@ pub fn download(props: &DownloadProps) -> Html {
                 let mut key_slice = [0u8; 32];
                 if let Err(err) = h.expand(&[], &mut key_slice[..]) {
                     log::error!("cannot expand passphrase by hkdf: {:?}", err);
+                    error_state.set("cannot expand passphrase by hkdf");
                     return;
                 }
                 let key = Key::clone_from_slice(&key_slice);
@@ -133,6 +148,7 @@ pub fn download(props: &DownloadProps) -> Html {
                         Ok(decrypted) => decrypted,
                         Err(err) => {
                             log::error!("failed to decrypt filename: {:?}", err);
+                            error_state.set("failed to decrypt filename");
                             return;
                         }
                     }
@@ -144,6 +160,7 @@ pub fn download(props: &DownloadProps) -> Html {
 
                 let seq_count = (metadata.size as f64 / metadata.block_size as f64).ceil() as usize;
 
+                let error_state = error_state.clone();
                 let id = id.clone();
                 let metadata = metadata.clone();
                 let progress = progress.clone();
@@ -163,17 +180,20 @@ pub fn download(props: &DownloadProps) -> Html {
                             Ok(resp) => resp,
                             Err(error) => {
                                 log::error!("failed to fetch chunk: {:?}", error);
+                                error_state.set("failed to fetch chunk");
                                 return;
                             }
                         };
                         if resp.status() != 200 {
                             log::error!("failed to fetch chunk. status code: {}", resp.status());
+                            error_state.set("failed to fetch chunk");
                             return;
                         }
                         let chunk = match resp.binary().await {
                             Ok(resp) => resp,
                             Err(error) => {
                                 log::error!("failed to read chunk response: {:?}", error);
+                                error_state.set("failed to read chunk response");
                                 return;
                             }
                         };
@@ -182,6 +202,7 @@ pub fn download(props: &DownloadProps) -> Html {
                             Ok(res) => res,
                             Err(error) => {
                                 log::error!("failed to decrypt chunk: {:?}", error);
+                                error_state.set("failed to decrypt chunk");
                                 return;
                             }
                         };
@@ -197,17 +218,20 @@ pub fn download(props: &DownloadProps) -> Html {
                         Ok(resp) => resp,
                         Err(error) => {
                             log::error!("failed to fetch chunk: {:?}", error);
+                            error_state.set("failed to fetch chunk");
                             return;
                         }
                     };
                     if resp.status() != 200 {
                         log::error!("failed to fetch chunk. status code: {}", resp.status());
+                        error_state.set("failed to fetch chunk");
                         return;
                     }
                     let chunk = match resp.binary().await {
                         Ok(resp) => resp,
                         Err(error) => {
                             log::error!("failed to read chunk response: {:?}", error);
+                            error_state.set("failed to read chunk response");
                             return;
                         }
                     };
@@ -216,6 +240,7 @@ pub fn download(props: &DownloadProps) -> Html {
                         Ok(res) => res,
                         Err(error) => {
                             log::error!("failed to decrypt chunk: {:?}", error);
+                            error_state.set("failed to decrypt chunk");
                             return;
                         }
                     };
@@ -229,6 +254,7 @@ pub fn download(props: &DownloadProps) -> Html {
                             metadata.size,
                             body.len()
                         );
+                        error_state.set("received bytes does not match expected size");
                         return;
                     }
 
@@ -236,6 +262,7 @@ pub fn download(props: &DownloadProps) -> Html {
                         Some(a) => a,
                         None => {
                             log::error!("failed to get a ref");
+                            error_state.set("failed to get a ref");
                             return;
                         }
                     };
@@ -263,6 +290,7 @@ pub fn download(props: &DownloadProps) -> Html {
                                 Ok(blob) => blob,
                                 Err(err) => {
                                     log::error!("failed to make data into blob: {:?}", err);
+                                    error_state.set("failed to make data into blob");
                                     return;
                                 }
                             }
@@ -272,6 +300,7 @@ pub fn download(props: &DownloadProps) -> Html {
                                 Ok(u) => u,
                                 Err(err) => {
                                     log::error!("failed to make blob into object url: {:?}", err);
+                                    error_state.set("failed to make blob into object url");
                                     return;
                                 }
                             }
@@ -285,12 +314,14 @@ pub fn download(props: &DownloadProps) -> Html {
                         // soon released by GC.
                         if let Err(e) = Url::revoke_object_url(&obj_url) {
                             log::error!("failed to revoke object url: {:?}", e);
+                            error_state.set("failed to revoke object url");
                         }
                     }
                 });
             }
         },
         (
+            error.clone(),
             passphrase,
             download_started.clone(),
             decrypted_filename.clone(),
@@ -350,6 +381,9 @@ pub fn download(props: &DownloadProps) -> Html {
                     </svg>
                 </div>
                 {inner}
+                if !error.is_empty() {
+                    <div class="alert alert-error mt-4">{&*error}</div>
+                }
             </div>
             <a download={(*decrypted_filename).clone()} class="hidden" ref={a_ref.clone()}></a>
         </NavBar>
