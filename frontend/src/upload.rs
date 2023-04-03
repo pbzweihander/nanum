@@ -62,6 +62,7 @@ pub fn upload() -> Html {
     let file = use_state::<Option<File>, _>(|| None);
     let passphrase = use_state(String::new);
 
+    let upload_started = use_state(|| false);
     let progress = use_state(|| 0usize);
     let finished_id = use_state::<Option<String>, _>(|| None);
 
@@ -87,14 +88,19 @@ pub fn upload() -> Html {
     let onsubmit = {
         let file = file.clone();
         let passphrase = passphrase.clone();
+        let upload_started = upload_started.clone();
         let progress = progress.clone();
         let finished_id = finished_id.clone();
         move |e: SubmitEvent| {
             e.prevent_default();
 
-            if file.is_none() || passphrase.is_empty() {
+            if *upload_started || file.is_none() || passphrase.is_empty() {
                 return;
             }
+
+            progress.set(0);
+            finished_id.set(None);
+            upload_started.set(true);
 
             let file = file.as_ref().unwrap();
             let file_size = file.size() as usize;
@@ -176,6 +182,7 @@ pub fn upload() -> Html {
 
             let stream_nonce = *stream_nonce;
 
+            let upload_started = upload_started.clone();
             let progress = progress.clone();
             let finished_id = finished_id.clone();
             // core logic of streaming upload / encryption
@@ -298,6 +305,7 @@ pub fn upload() -> Html {
 
                 progress.set(file_size);
                 finished_id.set(Some(id));
+                upload_started.set(false);
             };
 
             // spawn entire routine in promise
@@ -308,15 +316,16 @@ pub fn upload() -> Html {
 
     let is_submit_disabled = file.is_none() || passphrase.is_empty();
 
-    let progress_show = if let Some(file) = &*file {
-        let p = (*progress as f64) / file.size() * 1000.;
-        html! {
-            <div class="w-full mt-8">
-                <progress class="progress w-full" value={format!("{}", p)} max="1000" />
-            </div>
+    let progress_show = match (*upload_started, &*file) {
+        (true, Some(file)) => {
+            let p = (*progress as f64) / file.size() * 1000.;
+            html! {
+                <div class="w-full mt-4">
+                    <progress class="progress w-full" value={format!("{}", p)} max="1000" />
+                </div>
+            }
         }
-    } else {
-        html! { <></> }
+        _ => html! { <></> },
     };
     let finished_id_show = if let Some(id) = &*finished_id {
         html! {
@@ -342,10 +351,12 @@ pub fn upload() -> Html {
                     <input
                         type="password"
                         placeholder="Passphrase"
-                        class="input w-full mb-4"
+                        class="input w-full"
                         onchange={on_passphrase_change}
                     />
-                    <input type="submit" class="btn" value="Upload" disabled={is_submit_disabled} />
+                    if !*upload_started {
+                        <input type="submit" class="btn mt-4" value="Upload" disabled={is_submit_disabled} />
+                    }
                 </form>
                 {progress_show}
                 {finished_id_show}

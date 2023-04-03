@@ -59,6 +59,7 @@ pub fn download(props: &DownloadProps) -> Html {
 
     let passphrase = use_state(String::new);
 
+    let download_started = use_state(|| false);
     let decrypted_filename = use_state::<Option<String>, _>(|| None);
     let progress = use_state(|| 0usize);
 
@@ -74,15 +75,18 @@ pub fn download(props: &DownloadProps) -> Html {
         let id = props.id.clone();
         let metadata = metadata.clone();
         let passphrase = passphrase.clone();
+        let download_started = download_started.clone();
         let decrypted_filename_state = decrypted_filename.clone();
         let progress = progress.clone();
         let a_ref = a_ref.clone();
         move |e: SubmitEvent| {
             e.prevent_default();
 
-            if passphrase.is_empty() || metadata.is_none() {
+            if *download_started || passphrase.is_empty() || metadata.is_none() {
                 return;
             }
+
+            download_started.set(true);
 
             let metadata = metadata.as_ref().unwrap();
 
@@ -266,7 +270,7 @@ pub fn download(props: &DownloadProps) -> Html {
     let progress_show = if let Some(metadata) = &*metadata {
         let p = (*progress as f64) / (metadata.size as f64) * 1000.;
         html! {
-            <div class="w-full mt-8">
+            <div class="w-full mt-4">
                 <progress class="progress w-full" value={format!("{}", p)} max="1000" />
             </div>
         }
@@ -293,10 +297,12 @@ pub fn download(props: &DownloadProps) -> Html {
                     <input
                         type="password"
                         placeholder="Passphrase"
-                        class="input w-full mb-4"
+                        class="input w-full"
                         onchange={on_passphrase_change}
                     />
-                    <input type="submit" class="btn" value="Download" disabled={is_submit_disabled} />
+                    if !*download_started {
+                        <input type="submit" class="btn mt-4" value="Download" disabled={is_submit_disabled} />
+                    }
                 </form>
                 {progress_show}
                 {decrypted_filename_show}
