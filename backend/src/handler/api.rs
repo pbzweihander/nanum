@@ -16,7 +16,10 @@ pub fn create_router() -> Router<AppState> {
     Router::new()
         .route("/health", routing::get(get_health))
         .route("/user", routing::get(get_user))
-        .route("/metadata/:id", routing::get(get_metadata))
+        .route(
+            "/metadata/:id",
+            routing::get(get_metadata).post(post_metadata),
+        )
         .route("/metadata", routing::post(post_metadata_with_random_id))
         .route("/file/:id/:seq", routing::get(get_file).post(post_file))
 }
@@ -46,27 +49,24 @@ async fn get_metadata(
 }
 
 #[derive(Deserialize)]
-struct PostMetadataWithRandomIdReq {
+struct PostMetadataReq {
     #[serde(flatten)]
     pub req: MetadataCreationReq,
 }
 
 #[derive(Serialize)]
-struct PostMetadataWithRandomIdResp {
+struct PostMetadataResp {
     pub id: String,
 }
 
-async fn post_metadata_with_random_id(
+async fn upload_metadata(
+    s3_client: &aws_sdk_s3::Client,
+    id: &str,
     user: User,
-    State(state): State<AppState>,
-    Json(req): Json<PostMetadataWithRandomIdReq>,
-) -> Result<Json<PostMetadataWithRandomIdResp>, (StatusCode, &'static str)> {
-    let id = random_string::generate(
-        CONFIG.random_uri_length,
-        "abcedfghijklmnopqrstuvwxyz0123456789",
-    );
-    let metadata = req.req.into_metadata(user.primary_email);
-    s3::upload_metadata(&state.s3_client, &id, &metadata)
+    req: MetadataCreationReq,
+) -> Result<(), (StatusCode, &'static str)> {
+    let metadata = req.into_metadata(user.primary_email);
+    s3::upload_metadata(s3_client, id, &metadata)
         .await
         .map_err(|error| {
             tracing::error!(%error, "failed to upload metadata to S3");
@@ -75,7 +75,30 @@ async fn post_metadata_with_random_id(
                 "failed to upload metadata to S3",
             )
         })?;
-    Ok(Json(PostMetadataWithRandomIdResp { id }))
+    Ok(())
+}
+
+async fn post_metadata(
+    Path(id): Path<String>,
+    user: User,
+    State(state): State<AppState>,
+    Json(req): Json<PostMetadataReq>,
+) -> Result<Json<PostMetadataResp>, (StatusCode, &'static str)> {
+    upload_metadata(&state.s3_client, &id, user, req.req).await?;
+    Ok(Json(PostMetadataResp { id }))
+}
+
+async fn post_metadata_with_random_id(
+    user: User,
+    State(state): State<AppState>,
+    Json(req): Json<PostMetadataReq>,
+) -> Result<Json<PostMetadataResp>, (StatusCode, &'static str)> {
+    let id = random_string::generate(
+        CONFIG.random_uri_length,
+        "abcedfghijklmnopqrstuvwxyz0123456789",
+    );
+    upload_metadata(&state.s3_client, &id, user, req.req).await?;
+    Ok(Json(PostMetadataResp { id }))
 }
 
 async fn get_file(
