@@ -66,6 +66,17 @@ async fn upload_metadata(
     user: User,
     req: MetadataCreationReq,
 ) -> Result<(), (StatusCode, &'static str)> {
+    let existing_metadata = s3::get_metadata(s3_client, id).await.map_err(|error| {
+        tracing::error!(%error, "failed to get metadata from S3");
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to get metadata from S3",
+        )
+    })?;
+    if existing_metadata.is_some() {
+        return Err((StatusCode::CONFLICT, ""));
+    }
+
     let metadata = req.into_metadata(user.primary_email);
     s3::upload_metadata(s3_client, id, &metadata)
         .await
@@ -125,6 +136,19 @@ async fn post_file(
     State(state): State<AppState>,
     body: Bytes,
 ) -> Result<(), (StatusCode, &'static str)> {
+    let existing_file = s3::get_file(&state.s3_client, &id, seq)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "failed to get file from S3");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to get file from S3",
+            )
+        })?;
+    if existing_file.is_some() {
+        return Err((StatusCode::CONFLICT, ""));
+    }
+
     s3::upload_file(&state.s3_client, &id, seq, body.to_vec())
         .await
         .map_err(|error| {
