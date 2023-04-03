@@ -283,15 +283,16 @@ pub fn download(props: &DownloadProps) -> Html {
         ),
     );
 
-    let progress_show = if let Some(metadata) = &*metadata {
-        let p = (*progress as f64) / (metadata.size as f64) * 1000.;
-        html! {
-            <div class="w-full mt-4">
-                <progress class="progress w-full" value={format!("{}", p)} max="1000" />
-            </div>
+    let progress_show = match (*download_started, &*metadata) {
+        (true, Some(metadata)) => {
+            let p = (*progress as f64) / (metadata.size as f64) * 1000.;
+            html! {
+                <div class="w-full mt-4">
+                    <progress class="progress w-full" value={format!("{}", p)} max="1000" />
+                </div>
+            }
         }
-    } else {
-        html! { <></> }
+        _ => html! { <></> },
     };
     let decrypted_filename_show = if let Some(filename) = &*decrypted_filename {
         html! {
