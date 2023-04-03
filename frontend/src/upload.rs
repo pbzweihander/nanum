@@ -349,11 +349,16 @@ pub fn upload() -> Html {
                     </svg>
                 </div>
                 <form class="form-control w-full" {onsubmit}>
-                    <input type="file" class="file-input w-full mb-4" onchange={on_file_change} />
+                    <label class="label label-text">{"File to upload"}</label>
+                    <input
+                        type="file"
+                        class="file-input file-input-bordered w-full"
+                        onchange={on_file_change}
+                    />
+                    <label class="label label-text">{"Passphrase"}</label>
                     <input
                         type="password"
-                        placeholder="Passphrase"
-                        class="input w-full"
+                        class="input input-bordered w-full"
                         onchange={on_passphrase_change}
                     />
                     if !*upload_started {

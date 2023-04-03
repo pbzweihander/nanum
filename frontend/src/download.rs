@@ -310,10 +310,10 @@ pub fn download(props: &DownloadProps) -> Html {
                     </svg>
                 </div>
                 <form class="form-control w-full" {onsubmit}>
+                    <label class="label label-text">{"Passphrase"}</label>
                     <input
                         type="password"
-                        placeholder="Passphrase"
-                        class="input w-full"
+                        class="input input-bordered w-full"
                         onchange={on_passphrase_change}
                     />
                     if !*download_started {
