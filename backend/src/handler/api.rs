@@ -44,7 +44,8 @@ async fn get_metadata(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "failed to get metadata from S3",
             )
-        })?;
+        })?
+        .ok_or((StatusCode::NOT_FOUND, ""))?;
     Ok(Json(metadata))
 }
 
@@ -113,7 +114,8 @@ async fn get_file(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "failed to get file from S3",
             )
-        })?;
+        })?
+        .ok_or((StatusCode::NOT_FOUND, ""))?;
     Ok(StreamBody::new(file))
 }
 

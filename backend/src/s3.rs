@@ -1,5 +1,7 @@
 use anyhow::Result;
-use aws_sdk_s3::{primitives::ByteStream, Client};
+use aws_sdk_s3::{
+    error::SdkError, operation::get_object::GetObjectError, primitives::ByteStream, Client,
+};
 use nanum_core::types::Metadata;
 
 use crate::config::CONFIG;
@@ -12,25 +14,42 @@ fn key_metadata(id: &str) -> String {
     format!("metadata/{id}.json")
 }
 
-async fn get_object(s3_client: &Client, key: &str) -> Result<ByteStream> {
+async fn get_object(s3_client: &Client, key: &str) -> Result<Option<ByteStream>> {
     let resp = s3_client
         .get_object()
         .bucket(&CONFIG.s3_bucket_name)
         .key(key)
         .send()
-        .await?;
-    Ok(resp.body)
+        .await;
+    match resp {
+        Ok(resp) => Ok(Some(resp.body)),
+        Err(error) => {
+            if let SdkError::ServiceError(error) = error {
+                if let GetObjectError::NoSuchKey(_) = error.err() {
+                    Ok(None)
+                } else {
+                    Err(SdkError::ServiceError(error).into())
+                }
+            } else {
+                Err(error.into())
+            }
+        }
+    }
 }
 
-pub async fn get_file(s3_client: &Client, id: &str, seq: usize) -> Result<ByteStream> {
+pub async fn get_file(s3_client: &Client, id: &str, seq: usize) -> Result<Option<ByteStream>> {
     get_object(s3_client, &key_file(id, seq)).await
 }
 
-pub async fn get_metadata(s3_client: &Client, id: &str) -> Result<Metadata> {
+pub async fn get_metadata(s3_client: &Client, id: &str) -> Result<Option<Metadata>> {
     let resp = get_object(s3_client, &key_metadata(id)).await?;
-    let body = resp.collect().await?.to_vec();
-    let metadata = serde_json::from_slice(&body)?;
-    Ok(metadata)
+    if let Some(resp) = resp {
+        let body = resp.collect().await?.to_vec();
+        let metadata = serde_json::from_slice(&body)?;
+        Ok(metadata)
+    } else {
+        Ok(None)
+    }
 }
 
 pub async fn upload_metadata(s3_client: &Client, id: &str, metadata: &Metadata) -> Result<()> {
