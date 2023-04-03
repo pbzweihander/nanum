@@ -275,15 +275,13 @@ pub fn download(props: &DownloadProps) -> Html {
             }
         },
         (
-            passphrase.clone(),
+            passphrase,
             download_started.clone(),
             decrypted_filename.clone(),
             progress.clone(),
             a_ref.clone(),
         ),
     );
-
-    let is_submit_disabled = passphrase.is_empty() || metadata.is_none();
 
     let progress_show = if let Some(metadata) = &*metadata {
         let p = (*progress as f64) / (metadata.size as f64) * 1000.;
@@ -319,7 +317,7 @@ pub fn download(props: &DownloadProps) -> Html {
                         onchange={on_passphrase_change}
                     />
                     if !*download_started {
-                        <input type="submit" class="btn mt-4" value="Download" disabled={is_submit_disabled} />
+                        <input type="submit" class="btn mt-4" value="Download" />
                     }
                 </form>
                 {progress_show}

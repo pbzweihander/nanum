@@ -311,14 +311,12 @@ pub fn upload() -> Html {
         },
         (
             file.clone(),
-            passphrase.clone(),
+            passphrase,
             upload_started.clone(),
             progress.clone(),
             finished_id.clone(),
         ),
     );
-
-    let is_submit_disabled = file.is_none() || passphrase.is_empty();
 
     let progress_show = match (*upload_started, &*file) {
         (true, Some(file)) => {
@@ -359,7 +357,7 @@ pub fn upload() -> Html {
                         onchange={on_passphrase_change}
                     />
                     if !*upload_started {
-                        <input type="submit" class="btn mt-4" value="Upload" disabled={is_submit_disabled} />
+                        <input type="submit" class="btn mt-4" value="Upload" />
                     }
                 </form>
                 {progress_show}
