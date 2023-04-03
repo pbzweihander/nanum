@@ -13,7 +13,9 @@ use sha2::Sha256;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{Event, File, HtmlInputElement, SubmitEvent};
-use yew::{function_component, html, use_effect_with_deps, use_state, Html, TargetCast};
+use yew::{
+    function_component, html, use_callback, use_effect_with_deps, use_state, Html, TargetCast,
+};
 
 use crate::{navbar::NavBar, types::User};
 
@@ -66,35 +68,30 @@ pub fn upload() -> Html {
     let progress = use_state(|| 0usize);
     let finished_id = use_state::<Option<String>, _>(|| None);
 
-    let on_file_change = {
-        let file = file.clone();
-        move |e: Event| {
+    let on_file_change = use_callback(
+        move |e: Event, file| {
             let input: HtmlInputElement = e.target_unchecked_into();
             if let Some(files) = input.files() {
                 if let Some(f) = files.get(0) {
                     file.set(Some(f));
                 }
             }
-        }
-    };
-    let on_passphrase_change = {
-        let passphrase = passphrase.clone();
-        move |e: Event| {
+        },
+        file.clone(),
+    );
+    let on_passphrase_change = use_callback(
+        move |e: Event, passphrase| {
             let input: HtmlInputElement = e.target_unchecked_into();
             passphrase.set(input.value());
-        }
-    };
+        },
+        passphrase.clone(),
+    );
 
-    let onsubmit = {
-        let file = file.clone();
-        let passphrase = passphrase.clone();
-        let upload_started = upload_started.clone();
-        let progress = progress.clone();
-        let finished_id = finished_id.clone();
-        move |e: SubmitEvent| {
+    let onsubmit = use_callback(
+        move |e: SubmitEvent, (file, passphrase, upload_started, progress, finished_id)| {
             e.prevent_default();
 
-            if *upload_started || file.is_none() || passphrase.is_empty() {
+            if **upload_started || file.is_none() || passphrase.is_empty() {
                 return;
             }
 
@@ -311,8 +308,15 @@ pub fn upload() -> Html {
             // spawn entire routine in promise
             // TODO: research Web Workers and try to gain more performance
             spawn_local(encrypt_routine);
-        }
-    };
+        },
+        (
+            file.clone(),
+            passphrase.clone(),
+            upload_started.clone(),
+            progress.clone(),
+            finished_id.clone(),
+        ),
+    );
 
     let is_submit_disabled = file.is_none() || passphrase.is_empty();
 

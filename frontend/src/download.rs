@@ -8,8 +8,8 @@ use sha2::Sha256;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{Event, HtmlInputElement, HtmlLinkElement, SubmitEvent, Url};
 use yew::{
-    function_component, html, use_effect_with_deps, use_node_ref, use_state, Html, Properties,
-    TargetCast,
+    function_component, html, use_callback, use_effect_with_deps, use_node_ref, use_state, Html,
+    NodeRef, Properties, TargetCast, UseStateHandle,
 };
 
 use crate::navbar::NavBar;
@@ -63,77 +63,121 @@ pub fn download(props: &DownloadProps) -> Html {
     let decrypted_filename = use_state::<Option<String>, _>(|| None);
     let progress = use_state(|| 0usize);
 
-    let on_passphrase_change = {
-        let passphrase = passphrase.clone();
-        move |e: Event| {
+    let on_passphrase_change = use_callback(
+        move |e: Event, passphrase| {
             let input: HtmlInputElement = e.target_unchecked_into();
             passphrase.set(input.value());
-        }
-    };
+        },
+        passphrase.clone(),
+    );
 
-    let onsubmit = {
-        let id = props.id.clone();
-        let metadata = metadata.clone();
-        let passphrase = passphrase.clone();
-        let download_started = download_started.clone();
-        let decrypted_filename_state = decrypted_filename.clone();
-        let progress = progress.clone();
-        let a_ref = a_ref.clone();
-        move |e: SubmitEvent| {
-            e.prevent_default();
-
-            if *download_started || passphrase.is_empty() || metadata.is_none() {
-                return;
-            }
-
-            download_started.set(true);
-
-            let metadata = metadata.as_ref().unwrap();
-
-            // Reference: https://github.com/skystar-p/hako/blob/main/webapp/src/download.rs
-
-            // decrypt filename first
-            // restore key from passphrase
-            let h = Hkdf::<Sha256>::new(Some(metadata.salt.as_ref()), passphrase.as_bytes());
-            let mut key_slice = [0u8; 32];
-            if let Err(err) = h.expand(&[], &mut key_slice[..]) {
-                log::error!("cannot expand passphrase by hkdf: {:?}", err);
-                return;
-            }
-            let key = Key::clone_from_slice(&key_slice);
-            let cipher = XChaCha20Poly1305::new(&key);
-            let filename_nonce = GenericArray::from_slice(metadata.filename_nonce.as_ref());
-            let decrypted_filename = {
-                match cipher.decrypt(filename_nonce, metadata.filename.as_ref()) {
-                    Ok(decrypted) => decrypted,
-                    Err(err) => {
-                        log::error!("failed to decrypt filename: {:?}", err);
-                        return;
-                    }
-                }
-            };
-
-            decrypted_filename_state.set(Some(
-                String::from_utf8_lossy(&decrypted_filename).to_string(),
-            ));
-
-            let seq_count = (metadata.size as f64 / metadata.block_size as f64).ceil() as usize;
-
-            let id = id.clone();
+    let onsubmit = use_callback::<
+        _,
+        _,
+        _,
+        (
+            UseStateHandle<String>,
+            UseStateHandle<bool>,
+            UseStateHandle<Option<String>>,
+            UseStateHandle<usize>,
+            NodeRef,
+        ),
+    >(
+        {
+            let id = props.id.clone();
             let metadata = metadata.clone();
-            let progress = progress.clone();
-            let a_ref = a_ref.clone();
-            spawn_local(async move {
-                // make cipher
+            move |e: SubmitEvent,
+                  (passphrase, download_started, decrypted_filename_state, progress, a_ref)
+            | {
+                e.prevent_default();
+
+                if **download_started || passphrase.is_empty() || metadata.is_none() {
+                    return;
+                }
+
+                download_started.set(true);
+
+                let metadata = metadata.as_ref().unwrap();
+
+                // Reference: https://github.com/skystar-p/hako/blob/main/webapp/src/download.rs
+
+                // decrypt filename first
+                // restore key from passphrase
+                let h = Hkdf::<Sha256>::new(Some(metadata.salt.as_ref()), passphrase.as_bytes());
+                let mut key_slice = [0u8; 32];
+                if let Err(err) = h.expand(&[], &mut key_slice[..]) {
+                    log::error!("cannot expand passphrase by hkdf: {:?}", err);
+                    return;
+                }
+                let key = Key::clone_from_slice(&key_slice);
                 let cipher = XChaCha20Poly1305::new(&key);
-                let stream_nonce = GenericArray::from_slice(metadata.nonce.as_ref());
-                let mut decryptor = DecryptorBE32::from_aead(cipher, stream_nonce);
+                let filename_nonce = GenericArray::from_slice(metadata.filename_nonce.as_ref());
+                let decrypted_filename = {
+                    match cipher.decrypt(filename_nonce, metadata.filename.as_ref()) {
+                        Ok(decrypted) => decrypted,
+                        Err(err) => {
+                            log::error!("failed to decrypt filename: {:?}", err);
+                            return;
+                        }
+                    }
+                };
 
-                // preallocate buffers
-                let mut body = Vec::<u8>::with_capacity(metadata.size);
+                decrypted_filename_state.set(Some(
+                    String::from_utf8_lossy(&decrypted_filename).to_string(),
+                ));
 
-                for seq in 1..=(seq_count - 1) {
-                    let resp = match Request::get(&format!("/api/file/{id}/{seq}")).send().await {
+                let seq_count = (metadata.size as f64 / metadata.block_size as f64).ceil() as usize;
+
+                let id = id.clone();
+                let metadata = metadata.clone();
+                let progress = progress.clone();
+                let a_ref = a_ref.clone();
+                spawn_local(async move {
+                    // make cipher
+                    let cipher = XChaCha20Poly1305::new(&key);
+                    let stream_nonce = GenericArray::from_slice(metadata.nonce.as_ref());
+                    let mut decryptor = DecryptorBE32::from_aead(cipher, stream_nonce);
+
+                    // preallocate buffers
+                    let mut body = Vec::<u8>::with_capacity(metadata.size);
+
+                    for seq in 1..=(seq_count - 1) {
+                        let resp = match Request::get(&format!("/api/file/{id}/{seq}")).send().await
+                        {
+                            Ok(resp) => resp,
+                            Err(error) => {
+                                log::error!("failed to fetch chunk: {:?}", error);
+                                return;
+                            }
+                        };
+                        if resp.status() != 200 {
+                            log::error!("failed to fetch chunk. status code: {}", resp.status());
+                            return;
+                        }
+                        let chunk = match resp.binary().await {
+                            Ok(resp) => resp,
+                            Err(error) => {
+                                log::error!("failed to read chunk response: {:?}", error);
+                                return;
+                            }
+                        };
+
+                        let mut res = match decryptor.decrypt_next(chunk.as_slice()) {
+                            Ok(res) => res,
+                            Err(error) => {
+                                log::error!("failed to decrypt chunk: {:?}", error);
+                                return;
+                            }
+                        };
+
+                        body.append(&mut res);
+                        progress.set(body.len());
+                    }
+
+                    let resp = match Request::get(&format!("/api/file/{id}/{seq_count}"))
+                        .send()
+                        .await
+                    {
                         Ok(resp) => resp,
                         Err(error) => {
                             log::error!("failed to fetch chunk: {:?}", error);
@@ -152,7 +196,7 @@ pub fn download(props: &DownloadProps) -> Html {
                         }
                     };
 
-                    let mut res = match decryptor.decrypt_next(chunk.as_slice()) {
+                    let mut res = match decryptor.decrypt_last(chunk.as_slice()) {
                         Ok(res) => res,
                         Err(error) => {
                             log::error!("failed to decrypt chunk: {:?}", error);
@@ -162,108 +206,82 @@ pub fn download(props: &DownloadProps) -> Html {
 
                     body.append(&mut res);
                     progress.set(body.len());
-                }
 
-                let resp = match Request::get(&format!("/api/file/{id}/{seq_count}"))
-                    .send()
-                    .await
-                {
-                    Ok(resp) => resp,
-                    Err(error) => {
-                        log::error!("failed to fetch chunk: {:?}", error);
+                    if body.len() != metadata.size {
+                        log::error!(
+                            "received bytes does not match expected size. expected: {}, actual: {}",
+                            metadata.size,
+                            body.len()
+                        );
                         return;
                     }
-                };
-                if resp.status() != 200 {
-                    log::error!("failed to fetch chunk. status code: {}", resp.status());
-                    return;
-                }
-                let chunk = match resp.binary().await {
-                    Ok(resp) => resp,
-                    Err(error) => {
-                        log::error!("failed to read chunk response: {:?}", error);
-                        return;
-                    }
-                };
 
-                let mut res = match decryptor.decrypt_last(chunk.as_slice()) {
-                    Ok(res) => res,
-                    Err(error) => {
-                        log::error!("failed to decrypt chunk: {:?}", error);
-                        return;
-                    }
-                };
-
-                body.append(&mut res);
-                progress.set(body.len());
-
-                if body.len() != metadata.size {
-                    log::error!(
-                        "received bytes does not match expected size. expected: {}, actual: {}",
-                        metadata.size,
-                        body.len()
-                    );
-                    return;
-                }
-
-                let a = match a_ref.cast::<HtmlLinkElement>() {
-                    Some(a) => a,
-                    None => {
-                        log::error!("failed to get a ref");
-                        return;
-                    }
-                };
-
-                // Touching filesystem in browser is strictly prohibited because of security
-                // context, so we cannot pipe Vec<u8> into file directly. In order to invoke file
-                // download for user, we have to convert it into `Blob` object and retrieve its
-                // object url(which will resides in memory).
-                // But we cannot use Vec<u8>'s reference directly because `Blob` is immutable
-                // itself, so we have to full-copy the whole buffer. Not efficient of course...
-                // In addition, moving WASM's linear memory into JS's `Uint8Array` also cause full
-                // copy of buffer, which is worse... (consumes `file_size` * 3 amount of memory)
-                // So in here, we use unsafe method `Uint8Array::view()` which just unsafely map
-                // WASM's memory into linear `Uint8Array`'s memory representation, which will not
-                // cause copy of memory. `mem_view` and decrypted content should have same
-                // lifetime, and those should not be reallocated.
-                unsafe {
-                    let blob_parts = Array::new();
-                    let mem_view = Uint8Array::view(&body);
-                    blob_parts.push(&mem_view);
-                    let decrypted_blob = {
-                        // causes full copy of buffer. this will consumes lots of memory, but there
-                        // are no workaround currently.
-                        match web_sys::Blob::new_with_u8_array_sequence(&blob_parts) {
-                            Ok(blob) => blob,
-                            Err(err) => {
-                                log::error!("failed to make data into blob: {:?}", err);
-                                return;
-                            }
-                        }
-                    };
-                    let obj_url = {
-                        match Url::create_object_url_with_blob(&decrypted_blob) {
-                            Ok(u) => u,
-                            Err(err) => {
-                                log::error!("failed to make blob into object url: {:?}", err);
-                                return;
-                            }
+                    let a = match a_ref.cast::<HtmlLinkElement>() {
+                        Some(a) => a,
+                        None => {
+                            log::error!("failed to get a ref");
+                            return;
                         }
                     };
 
-                    a.set_href(&obj_url);
-                    // invoke download action
-                    a.click();
+                    // Touching filesystem in browser is strictly prohibited because of security
+                    // context, so we cannot pipe Vec<u8> into file directly. In order to invoke file
+                    // download for user, we have to convert it into `Blob` object and retrieve its
+                    // object url(which will resides in memory).
+                    // But we cannot use Vec<u8>'s reference directly because `Blob` is immutable
+                    // itself, so we have to full-copy the whole buffer. Not efficient of course...
+                    // In addition, moving WASM's linear memory into JS's `Uint8Array` also cause full
+                    // copy of buffer, which is worse... (consumes `file_size` * 3 amount of memory)
+                    // So in here, we use unsafe method `Uint8Array::view()` which just unsafely map
+                    // WASM's memory into linear `Uint8Array`'s memory representation, which will not
+                    // cause copy of memory. `mem_view` and decrypted content should have same
+                    // lifetime, and those should not be reallocated.
+                    unsafe {
+                        let blob_parts = Array::new();
+                        let mem_view = Uint8Array::view(&body);
+                        blob_parts.push(&mem_view);
+                        let decrypted_blob = {
+                            // causes full copy of buffer. this will consumes lots of memory, but there
+                            // are no workaround currently.
+                            match web_sys::Blob::new_with_u8_array_sequence(&blob_parts) {
+                                Ok(blob) => blob,
+                                Err(err) => {
+                                    log::error!("failed to make data into blob: {:?}", err);
+                                    return;
+                                }
+                            }
+                        };
+                        let obj_url = {
+                            match Url::create_object_url_with_blob(&decrypted_blob) {
+                                Ok(u) => u,
+                                Err(err) => {
+                                    log::error!("failed to make blob into object url: {:?}", err);
+                                    return;
+                                }
+                            }
+                        };
 
-                    // immediately revoke object url so that memory consumed by `Blob` object will
-                    // soon released by GC.
-                    if let Err(e) = Url::revoke_object_url(&obj_url) {
-                        log::error!("failed to revoke object url: {:?}", e);
+                        a.set_href(&obj_url);
+                        // invoke download action
+                        a.click();
+
+                        // immediately revoke object url so that memory consumed by `Blob` object will
+                        // soon released by GC.
+                        if let Err(e) = Url::revoke_object_url(&obj_url) {
+                            log::error!("failed to revoke object url: {:?}", e);
+                        }
                     }
-                }
-            });
-        }
-    };
+                });
+            }
+        },
+        (
+            passphrase.clone(),
+            download_started.clone(),
+            decrypted_filename.clone(),
+            progress.clone(),
+            a_ref.clone(),
+        ),
+    );
 
     let is_submit_disabled = passphrase.is_empty() || metadata.is_none();
 
