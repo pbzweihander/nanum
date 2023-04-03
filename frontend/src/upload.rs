@@ -62,6 +62,7 @@ pub fn upload() -> Html {
     );
 
     let file = use_state::<Option<File>, _>(|| None);
+    let id = use_state(String::new);
     let passphrase = use_state(String::new);
 
     let upload_started = use_state(|| false);
@@ -79,6 +80,13 @@ pub fn upload() -> Html {
         },
         file.clone(),
     );
+    let on_id_change = use_callback(
+        move |e: Event, id| {
+            let input: HtmlInputElement = e.target_unchecked_into();
+            id.set(input.value());
+        },
+        id.clone(),
+    );
     let on_passphrase_change = use_callback(
         move |e: Event, passphrase| {
             let input: HtmlInputElement = e.target_unchecked_into();
@@ -88,7 +96,7 @@ pub fn upload() -> Html {
     );
 
     let onsubmit = use_callback(
-        move |e: SubmitEvent, (file, passphrase, upload_started, progress, finished_id)| {
+        move |e: SubmitEvent, (file, id, passphrase, upload_started, progress, finished_id)| {
             e.prevent_default();
 
             if **upload_started || file.is_none() || passphrase.is_empty() {
@@ -179,6 +187,7 @@ pub fn upload() -> Html {
 
             let stream_nonce = *stream_nonce;
 
+            let id = id.clone();
             let upload_started = upload_started.clone();
             let progress = progress.clone();
             let finished_id = finished_id.clone();
@@ -188,7 +197,12 @@ pub fn upload() -> Html {
                 let mut encryptor = EncryptorBE32::from_aead(cipher, &stream_nonce);
                 // send prepare request
 
-                let req = match Request::post("/api/metadata").json(&metadata) {
+                let uri = if !id.is_empty() {
+                    format!("/api/metadata/{}", *id)
+                } else {
+                    "/api/metadata".to_string()
+                };
+                let req = match Request::post(&uri).json(&metadata) {
                     Ok(req) => req,
                     Err(error) => {
                         log::error!("failed to make request: {:?}", error);
@@ -311,6 +325,7 @@ pub fn upload() -> Html {
         },
         (
             file.clone(),
+            id,
             passphrase,
             upload_started.clone(),
             progress.clone(),
@@ -354,6 +369,13 @@ pub fn upload() -> Html {
                         type="file"
                         class="file-input file-input-bordered w-full"
                         onchange={on_file_change}
+                    />
+                    <label class="label label-text">{"ID"}</label>
+                    <input
+                        type="text"
+                        placeholder="<random>"
+                        class="input input-bordered w-full"
+                        onchange={on_id_change}
                     />
                     <label class="label label-text">{"Passphrase"}</label>
                     <input
