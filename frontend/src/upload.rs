@@ -146,10 +146,7 @@ pub fn upload() -> Html {
             // encrypt filename
             let filename = file.name();
             let encrypted_filename = {
-                match cipher.encrypt(
-                    filename_nonce,
-                    filename.bytes().collect::<Vec<u8>>().as_ref(),
-                ) {
+                match cipher.encrypt(filename_nonce, filename.as_bytes()) {
                     Ok(encrypted) => encrypted,
                     Err(err) => {
                         log::error!("failed to encrypt filename: {:?}", err);
