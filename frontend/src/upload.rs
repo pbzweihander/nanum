@@ -3,7 +3,7 @@ use chacha20poly1305::{
     aead::{generic_array::GenericArray, Aead},
     Key, KeyInit, XChaCha20Poly1305,
 };
-use futures_util::TryStreamExt;
+use futures_util::{StreamExt, TryStreamExt};
 use gloo_net::http::Request;
 use hkdf::Hkdf;
 use js_sys::Uint8Array;
@@ -216,7 +216,14 @@ pub fn upload() -> Html {
                 let mut seq: i64 = 1;
                 let mut buffer = Vec::<u8>::with_capacity(BLOCK_SIZE);
                 // start encryption and upload
-                while let Ok(Some(v)) = fut.try_next().await {
+                while let Some(res) = fut.next().await {
+                    let v = match res {
+                        Ok(v) => v,
+                        Err(error) => {
+                            log::error!("failed to read stream: {:?}", error);
+                            return;
+                        }
+                    };
                     let mut v: &[u8] = v.as_ref();
                     // divide inputs into fixed block size
                     while buffer.len() + v.len() >= BLOCK_SIZE {
