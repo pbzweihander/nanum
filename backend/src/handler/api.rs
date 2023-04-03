@@ -63,7 +63,7 @@ async fn post_metadata_with_random_id(
 ) -> Result<Json<PostMetadataWithRandomIdResp>, (StatusCode, &'static str)> {
     let id = random_string::generate(
         CONFIG.random_uri_length,
-        "abcedfghijklmnopqrstuvwxyzABCEDFGHIJKLMNOPQRSTUVWXYZ0123456789",
+        "abcedfghijklmnopqrstuvwxyz0123456789",
     );
     let metadata = req.req.into_metadata(user.primary_email);
     s3::upload_metadata(&state.s3_client, &id, &metadata)
