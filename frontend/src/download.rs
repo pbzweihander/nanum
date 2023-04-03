@@ -19,9 +19,15 @@ pub struct DownloadProps {
     pub id: String,
 }
 
+enum MetadataStatus {
+    Loaded(Metadata),
+    Loading,
+    NotFound,
+}
+
 #[function_component(Download)]
 pub fn download(props: &DownloadProps) -> Html {
-    let metadata = use_state::<Option<Metadata>, _>(|| None);
+    let metadata = use_state(|| MetadataStatus::Loading);
 
     use_effect_with_deps(
         {
@@ -36,9 +42,15 @@ pub fn download(props: &DownloadProps) -> Html {
                             return;
                         }
                     };
-                    if resp.status() != 200 {
-                        log::error!("failed to fetch metadata. status code: {}", resp.status());
-                        return;
+                    let status = resp.status();
+                    if status != 200 {
+                        if status == 404 {
+                            metadata.set(MetadataStatus::NotFound);
+                            return;
+                        } else {
+                            log::error!("failed to fetch metadata. status code: {}", status);
+                            return;
+                        }
                     }
                     let fetched_metadata: Metadata = match resp.json().await {
                         Ok(resp) => resp,
@@ -47,7 +59,7 @@ pub fn download(props: &DownloadProps) -> Html {
                             return;
                         }
                     };
-                    metadata.set(Some(fetched_metadata));
+                    metadata.set(MetadataStatus::Loaded(fetched_metadata));
                 });
                 || ()
             }
@@ -91,13 +103,17 @@ pub fn download(props: &DownloadProps) -> Html {
             | {
                 e.prevent_default();
 
-                if **download_started || passphrase.is_empty() || metadata.is_none() {
+                if **download_started || passphrase.is_empty() {
                     return;
                 }
 
-                download_started.set(true);
+                let metadata = if let MetadataStatus::Loaded(metadata) = &*metadata {
+                    metadata
+                } else {
+                    return;
+                };
 
-                let metadata = metadata.as_ref().unwrap();
+                download_started.set(true);
 
                 // Reference: https://github.com/skystar-p/hako/blob/main/webapp/src/download.rs
 
@@ -283,23 +299,46 @@ pub fn download(props: &DownloadProps) -> Html {
         ),
     );
 
-    let progress_show = match (*download_started, &*metadata) {
-        (true, Some(metadata)) => {
-            let p = (*progress as f64) / (metadata.size as f64) * 1000.;
+    let inner = match &*metadata {
+        MetadataStatus::Loaded(metadata) => {
+            let progress_show = if *download_started {
+                let p = (*progress as f64) / (metadata.size as f64) * 1000.;
+                html! {
+                    <div class="w-full mt-4">
+                        <progress class="progress w-full" value={format!("{}", p)} max="1000" />
+                    </div>
+                }
+            } else {
+                html! { <></> }
+            };
+            let decrypted_filename_show = if let Some(filename) = &*decrypted_filename {
+                html! {
+                    <div class="w-full mt-4">{filename}</div>
+                }
+            } else {
+                html! { <></> }
+            };
+
             html! {
-                <div class="w-full mt-4">
-                    <progress class="progress w-full" value={format!("{}", p)} max="1000" />
-                </div>
+                <>
+                    <form class="form-control w-full" {onsubmit}>
+                        <label class="label label-text">{"Passphrase"}</label>
+                        <input
+                            type="password"
+                            class="input input-bordered w-full"
+                            onchange={on_passphrase_change}
+                        />
+                        if !*download_started {
+                            <input type="submit" class="btn mt-4" value="Download" />
+                        }
+                    </form>
+                    {progress_show}
+                    {decrypted_filename_show}
+                </>
             }
         }
-        _ => html! { <></> },
-    };
-    let decrypted_filename_show = if let Some(filename) = &*decrypted_filename {
-        html! {
-            <div class="w-full mt-4">{filename}</div>
-        }
-    } else {
-        html! { <></> }
+        MetadataStatus::Loading => html! { <div class="text-xl">{"Loading..."}</div> },
+        MetadataStatus::NotFound => html! { <div class="text-xl">{"Not found"}</div> },
     };
 
     html! {
@@ -310,19 +349,7 @@ pub fn download(props: &DownloadProps) -> Html {
                       <path fill-rule="evenodd" d="M10.5 3.75a6 6 0 00-5.98 6.496A5.25 5.25 0 006.75 20.25H18a4.5 4.5 0 002.206-8.423 3.75 3.75 0 00-4.133-4.303A6.001 6.001 0 0010.5 3.75zm2.25 6a.75.75 0 00-1.5 0v4.94l-1.72-1.72a.75.75 0 00-1.06 1.06l3 3a.75.75 0 001.06 0l3-3a.75.75 0 10-1.06-1.06l-1.72 1.72V9.75z" clip-rule="evenodd" />
                     </svg>
                 </div>
-                <form class="form-control w-full" {onsubmit}>
-                    <label class="label label-text">{"Passphrase"}</label>
-                    <input
-                        type="password"
-                        class="input input-bordered w-full"
-                        onchange={on_passphrase_change}
-                    />
-                    if !*download_started {
-                        <input type="submit" class="btn mt-4" value="Download" />
-                    }
-                </form>
-                {progress_show}
-                {decrypted_filename_show}
+                {inner}
             </div>
             <a download={(*decrypted_filename).clone()} class="hidden" ref={a_ref.clone()}></a>
         </NavBar>
