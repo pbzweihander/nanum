@@ -37,6 +37,7 @@ jobs:
           frontend-node-modules-${{ runner.os }}-
 
     - name: Install node dependencies
+      working-directory: frontend
       run: yarn
     - name: Build frontend
       working-directory: frontend
