@@ -16,6 +16,8 @@ jobs:
       with:
         profile: minimal
         toolchain: stable
+        target: x86_64-unknown-linux-musl
+        override: true
     - uses: actions-rs/toolchain@v1
       with:
         profile: minimal
@@ -48,10 +50,10 @@ jobs:
       with:
         use-cross: true
         command: build
-        args: --release --manifest-path backend/Cargo.toml
+        args: --release --manifest-path backend/Cargo.toml --target x86_64-unknown-linux-musl
 
     - uses: actions/upload-artifact@v3
       with:
         name: nanum
-        path: target/x86_64-unknown-linux-gnu/release/nanum
+        path: target/x86_64-unknown-linux-musl/release/nanum
         if-no-files-found: error
