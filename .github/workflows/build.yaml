@@ -53,5 +53,5 @@ jobs:
     - uses: actions/upload-artifact@v3
       with:
         name: nanum
-        path: target/release/nanum
+        path: target/x86_64-unknown-linux-gnu/release/nanum
         if-no-files-found: error
