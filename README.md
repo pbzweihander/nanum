@@ -1,6 +1,17 @@
 # nanum
 
-_nanum_ is a file sharing service.
+_nanum_ is a file sharing service with client-side encryption.
+Inspired by [skystar-p/hako](https://github.com/skystar-p/hako).
+
+![preview](./res/preview.png)
+
+## Features
+
+- Simple file sharing.
+- Only authorized user can upload, but anyone can download (with passphrase).
+- Use S3 for persistent storage.
+- No database.
+- Client-side encryption using `xchacha20poly1305`.
 
 ## Usage
 
