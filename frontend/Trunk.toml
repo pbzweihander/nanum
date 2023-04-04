@@ -1,5 +1,4 @@
 [build]
-release = true
 public_url = "/static/"
 
 [[hooks]]
