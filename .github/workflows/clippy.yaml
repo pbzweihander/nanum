@@ -20,7 +20,7 @@ jobs:
     - name: Create dummy frontend files
       run: |
         mkdir frontend/dist
-        touch frotnend/dist/index.html
+        touch frontend/dist/index.html
     - uses: actions-rs/clippy-check@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
