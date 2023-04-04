@@ -1,0 +1,55 @@
+name: build
+
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        target: wasm32-unknown-unknown
+    - uses: actions/setup-node@v3
+      with:
+        node-version: "19"
+    - uses: jetli/trunk-action@v0.4.0
+      with:
+        version: latest
+
+    - uses: Swatinem/rust-cache@v2
+    - uses: actions/cache@v2
+      with:
+        path: frontend/node_modules
+        key: frontend-node-modules-${{ runner.os }}-${{ hashFiles('frontend/yarn.lock') }}
+        restore-keys: |
+          frontend-node-modules-${{ runner.os }}-
+
+    - name: Install node dependencies
+      run: yarn
+    - name: Build frontend
+      working-directory: frontend
+      run: trunk build --release
+
+    - name: Build backend
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release --manifest-path backend/Cargo.toml
+
+    - uses: actions/upload-artifact@v3
+      with:
+        name: nanum
+        path: target/release/nanum
+        if-no-files-found: error
