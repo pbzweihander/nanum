@@ -1,0 +1,16 @@
+[package]
+name = "nanum-admin"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { version = "1.0.70", features = ["backtrace"] }
+aws-config = "0.55.0"
+aws-sdk-s3 = "0.25.0"
+bytesize = "1.2.0"
+clap = { version = "4.2.1", features = ["derive", "env"] }
+cli-table = { version = "0.4.7", default-features = false }
+futures-util = "0.3.28"
+nanum-core = { version = "0.1.0", path = "../core" }
+serde_json = "1.0.95"
+tokio = { version = "1.27.0", features = ["rt-multi-thread", "macros"] }
